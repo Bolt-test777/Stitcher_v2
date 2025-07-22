@@ -242,63 +242,79 @@ class ControlPanel(QWidget):
             self.size_label.setText("Size: Multiple")
             self.file_label.setText("File: Multiple")
             
-            # Disable free rotation controls for groups
+            # Disable ONLY free rotation and 45° controls for groups
             self.angle_spinbox.setEnabled(False)
             self.angle_45_btn.setEnabled(False)
             self.angle_neg45_btn.setEnabled(False)
             
-            # Keep 90° rotation buttons enabled
+            # Keep 90° rotation buttons ENABLED for groups
             self.rotate_cw_btn.setEnabled(True)
             self.rotate_ccw_btn.setEnabled(True)
             
-            # Disable individual position controls
-            self.x_spinbox.setEnabled(False)
-            self.y_spinbox.setEnabled(False)
+            # Keep arrow movement buttons ENABLED for groups
+            # Only disable the precise X/Y spinboxes (not the arrow buttons)
+            self.x_spinbox.setEnabled(False)  # Precise positioning disabled
+            self.y_spinbox.setEnabled(False)  # Precise positioning disabled
             
-            # Disable flip controls for groups (could be added later if needed)
-            self.flip_h_btn.setEnabled(False)
-            self.flip_v_btn.setEnabled(False)
+            # Disable ONLY flip controls for groups
+            self.flip_h_btn.setEnabled(False)  # Flip disabled for groups
+            self.flip_v_btn.setEnabled(False)  # Flip disabled for groups
             
-            # Disable visibility and opacity for groups
-            self.visible_checkbox.setEnabled(False)
-            self.opacity_slider.setEnabled(False)
+            # Keep visibility and opacity enabled for groups (affects all selected)
+            self.visible_checkbox.setEnabled(True)
+            self.opacity_slider.setEnabled(True)
             
         elif not has_fragment:
+            # No selection - disable everything
             self.name_label.setText("No selection")
             self.size_label.setText("Size: -")
             self.file_label.setText("File: -")
             
-            # Re-enable all controls
+        else:
+            # Single fragment selection - enable everything
+            fragment = self.current_fragment
+            
+            # Enable all controls for single fragments
             self.angle_spinbox.setEnabled(True)
             self.angle_45_btn.setEnabled(True)
             self.angle_neg45_btn.setEnabled(True)
+            self.rotate_cw_btn.setEnabled(True)
+            self.rotate_ccw_btn.setEnabled(True)
             self.flip_h_btn.setEnabled(True)
             self.flip_v_btn.setEnabled(True)
-            self.visible_checkbox.setEnabled(True)
-            self.opacity_slider.setEnabled(True)
+            self.visible_checkbox.setEnabled(False)
+            self.opacity_slider.setEnabled(False)
             self.x_spinbox.setEnabled(True)
             self.y_spinbox.setEnabled(True)
+            
+        elif not has_fragment:
+            # No selection - disable everything
+            self.name_label.setText("No selection")
+            self.size_label.setText("Size: -")
+            self.file_label.setText("File: -")
             return
             
         else:
-            # Single fragment selection
+            # Single fragment selection - enable everything
             fragment = self.current_fragment
-            
-            # Re-enable all controls
-            self.angle_spinbox.setEnabled(True)
-            self.angle_45_btn.setEnabled(True)
-            self.angle_neg45_btn.setEnabled(True)
-            self.flip_h_btn.setEnabled(True)
-            self.flip_v_btn.setEnabled(True)
-            self.visible_checkbox.setEnabled(True)
-            self.opacity_slider.setEnabled(True)
-            self.x_spinbox.setEnabled(True)
-            self.y_spinbox.setEnabled(True)
             
             # Update info
             self.name_label.setText(fragment.name or f"Fragment {fragment.id[:8]}")
             self.size_label.setText(f"Size: {fragment.original_size[0]} × {fragment.original_size[1]}")
             self.file_label.setText(f"File: {fragment.file_path}")
+            
+            # Enable all controls for single fragments
+            self.angle_spinbox.setEnabled(True)
+            self.angle_45_btn.setEnabled(True)
+            self.angle_neg45_btn.setEnabled(True)
+            self.rotate_cw_btn.setEnabled(True)
+            self.rotate_ccw_btn.setEnabled(True)
+            self.flip_h_btn.setEnabled(True)
+            self.flip_v_btn.setEnabled(True)
+            self.visible_checkbox.setEnabled(True)
+            self.opacity_slider.setEnabled(True)
+            self.x_spinbox.setEnabled(True)
+            self.y_spinbox.setEnabled(True)
             
             # Update position controls (block signals to prevent recursion)
             self.x_spinbox.blockSignals(True)
@@ -348,7 +364,7 @@ class ControlPanel(QWidget):
         """Request a transformation for the current fragment"""
         if self.is_group_selected:
             # Handle group transformations
-            if transform_type in ['rotate_cw', 'rotate_ccw']:
+            if transform_type in ['rotate_cw', 'rotate_ccw', 'translate']:
                 # Group rotation is allowed
                 self.transform_requested.emit('group', transform_type, self.selected_fragment_ids)
         elif self.current_fragment:

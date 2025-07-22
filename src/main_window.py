@@ -350,6 +350,10 @@ class MainWindow(QMainWindow):
                 self.fragment_manager.rotate_group(value, 90)  # value contains fragment_ids
             elif transform_type == 'rotate_ccw':
                 self.fragment_manager.rotate_group(value, -90)  # value contains fragment_ids
+            elif transform_type == 'translate':
+                # For group translation, value contains fragment_ids, and we need the dx, dy from the control panel
+                # This will be handled by the arrow buttons in the control panel
+                pass
             
     def reset_fragment_transform(self, fragment_id: str):
         """Reset fragment transformation"""
