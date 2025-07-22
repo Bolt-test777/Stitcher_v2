@@ -105,6 +105,7 @@ class MainWindow(QMainWindow):
         # Canvas connections
         self.canvas_widget.fragment_selected.connect(self.select_fragment)
         self.canvas_widget.fragment_moved.connect(self.update_fragment_position)
+        self.canvas_widget.group_moved.connect(self.update_group_position)
         
         # Fragment manager connections
         self.fragment_manager.fragments_changed.connect(self.update_ui)
@@ -377,6 +378,10 @@ class MainWindow(QMainWindow):
             print(f"Updating fragment {fragment.name} position: ({fragment.x}, {fragment.y}) -> ({x}, {y})")
         
         self.fragment_manager.set_fragment_position(fragment_id, x, y)
+        
+    def update_group_position(self, fragment_ids: List[str], dx: float, dy: float):
+        """Update group position from canvas interaction"""
+        self.fragment_manager.translate_group(fragment_ids, dx, dy)
         
     def perform_stitching(self):
         """Perform rigid stitching refinement"""

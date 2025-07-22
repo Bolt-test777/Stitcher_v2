@@ -87,6 +87,7 @@ class CanvasWidget(QWidget):
     viewport_changed = pyqtSignal(float, float, float)  # zoom, pan_x, pan_y
     delete_requested = pyqtSignal(str)  # fragment_id
     group_selected = pyqtSignal(list)  # list of fragment_ids
+    group_moved = pyqtSignal(list, float, float)  # fragment_ids, dx, dy
     
     def __init__(self):
         super().__init__()
@@ -535,11 +536,9 @@ class CanvasWidget(QWidget):
                     dx = new_x - dragged_fragment.x
                     dy = new_y - dragged_fragment.y
                     
-                    # Move entire group
-                    for frag_id in self.selected_fragment_ids:
-                        fragment = self.get_fragment_by_id(frag_id)
-                        if fragment:
-                            self.fragment_moved.emit(frag_id, fragment.x + dx, fragment.y + dy)
+                    # Move entire group by emitting a single signal with the offset
+                    # The fragment manager will handle moving all fragments
+                    self.group_moved.emit(self.selected_fragment_ids, dx, dy)
             else:
                 # Move single fragment
                 self.fragment_moved.emit(self.dragged_fragment_id, new_x, new_y)

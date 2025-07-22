@@ -225,9 +225,9 @@ class FragmentManager(QObject):
         if not fragments:
             return
         
-        # Calculate group center (centroid)
-        center_x = sum(f.x + f.get_bounding_box()[2]/2 for f in fragments) / len(fragments)
-        center_y = sum(f.y + f.get_bounding_box()[3]/2 for f in fragments) / len(fragments)
+        # Calculate group center (centroid) using fragment positions, not bounding boxes
+        center_x = sum(f.x for f in fragments) / len(fragments)
+        center_y = sum(f.y for f in fragments) / len(fragments)
         
         # Convert angle to radians
         angle_rad = math.radians(angle)
@@ -236,26 +236,17 @@ class FragmentManager(QObject):
         
         # Rotate each fragment around the group center
         for fragment in fragments:
-            # Get fragment center
-            bbox = fragment.get_bounding_box()
-            frag_center_x = fragment.x + bbox[2]/2
-            frag_center_y = fragment.y + bbox[3]/2
-            
-            # Translate to origin (relative to group center)
-            rel_x = frag_center_x - center_x
-            rel_y = frag_center_y - center_y
+            # Translate fragment position to origin (relative to group center)
+            rel_x = fragment.x - center_x
+            rel_y = fragment.y - center_y
             
             # Rotate around origin
             new_rel_x = rel_x * cos_a - rel_y * sin_a
             new_rel_y = rel_x * sin_a + rel_y * cos_a
             
-            # Translate back and update fragment position
-            new_frag_center_x = center_x + new_rel_x
-            new_frag_center_y = center_y + new_rel_y
-            
-            # Update fragment position (adjust for fragment's own center)
-            fragment.x = new_frag_center_x - bbox[2]/2
-            fragment.y = new_frag_center_y - bbox[3]/2
+            # Translate back to world coordinates
+            fragment.x = center_x + new_rel_x
+            fragment.y = center_y + new_rel_y
             
             # Also rotate the fragment itself
             fragment.rotation = (fragment.rotation + angle) % 360.0
