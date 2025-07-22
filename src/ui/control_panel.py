@@ -2,7 +2,7 @@
 Control panel for fragment manipulation
 """
 
-from typing import Optional
+from typing import Optional, List
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
                             QPushButton, QLabel, QSpinBox, QDoubleSpinBox,
                             QSlider, QCheckBox, QGridLayout)
@@ -20,12 +20,13 @@ class ControlPanel(QWidget):
     def __init__(self):
         super().__init__()
         self.current_fragment: Optional[Fragment] = None
-        self.setup_ui()
-        self.update_controls()
         
         # Group selection state
         self.selected_fragment_ids: List[str] = []
         self.is_group_selected = False
+        
+        self.setup_ui()
+        self.update_controls()
         
     def setup_ui(self):
         """Setup the control panel UI"""
