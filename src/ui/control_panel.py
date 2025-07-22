@@ -264,13 +264,7 @@ class ControlPanel(QWidget):
             self.visible_checkbox.setEnabled(True)
             self.opacity_slider.setEnabled(True)
             
-        elif not has_fragment:
-            # No selection - disable everything
-            self.name_label.setText("No selection")
-            self.size_label.setText("Size: -")
-            self.file_label.setText("File: -")
-            
-        else:
+        elif has_fragment and not self.is_group_selected:
             # Single fragment selection - enable everything
             fragment = self.current_fragment
             
@@ -286,17 +280,6 @@ class ControlPanel(QWidget):
             self.opacity_slider.setEnabled(False)
             self.x_spinbox.setEnabled(True)
             self.y_spinbox.setEnabled(True)
-            
-        elif not has_fragment:
-            # No selection - disable everything
-            self.name_label.setText("No selection")
-            self.size_label.setText("Size: -")
-            self.file_label.setText("File: -")
-            return
-            
-        else:
-            # Single fragment selection - enable everything
-            fragment = self.current_fragment
             
             # Update info
             self.name_label.setText(fragment.name or f"Fragment {fragment.id[:8]}")
@@ -341,6 +324,12 @@ class ControlPanel(QWidget):
             
             # Update transform button states
             self.update_transform_button_states()
+            
+        else:
+            # No selection - disable everything
+            self.name_label.setText("No selection")
+            self.size_label.setText("Size: -")
+            self.file_label.setText("File: -")
         
     def update_transform_button_states(self):
         """Update the visual state of transform buttons"""
