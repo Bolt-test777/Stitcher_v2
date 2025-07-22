@@ -163,28 +163,28 @@ class ControlPanel(QWidget):
         translation_layout = QGridLayout()
         
         # Up
-        up_btn = QPushButton("↑")
-        up_btn.clicked.connect(lambda: self.request_transform('translate', (0, -10)))
-        translation_layout.addWidget(up_btn, 0, 1)
+        self.up_btn = QPushButton("↑")
+        self.up_btn.clicked.connect(lambda: self.request_transform('translate', (0, -10)))
+        translation_layout.addWidget(self.up_btn, 0, 1)
         
         # Left, Center, Right
-        left_btn = QPushButton("←")
-        left_btn.clicked.connect(lambda: self.request_transform('translate', (-10, 0)))
-        translation_layout.addWidget(left_btn, 1, 0)
+        self.left_btn = QPushButton("←")
+        self.left_btn.clicked.connect(lambda: self.request_transform('translate', (-10, 0)))
+        translation_layout.addWidget(self.left_btn, 1, 0)
         
-        center_btn = QPushButton("⌂")
-        center_btn.setToolTip("Center fragment")
-        center_btn.clicked.connect(lambda: self.request_transform('translate', (0, 0)))
-        translation_layout.addWidget(center_btn, 1, 1)
+        self.center_btn = QPushButton("⌂")
+        self.center_btn.setToolTip("Center fragment")
+        self.center_btn.clicked.connect(lambda: self.request_transform('translate', (0, 0)))
+        translation_layout.addWidget(self.center_btn, 1, 1)
         
-        right_btn = QPushButton("→")
-        right_btn.clicked.connect(lambda: self.request_transform('translate', (10, 0)))
-        translation_layout.addWidget(right_btn, 1, 2)
+        self.right_btn = QPushButton("→")
+        self.right_btn.clicked.connect(lambda: self.request_transform('translate', (10, 0)))
+        translation_layout.addWidget(self.right_btn, 1, 2)
         
         # Down
-        down_btn = QPushButton("↓")
-        down_btn.clicked.connect(lambda: self.request_transform('translate', (0, 10)))
-        translation_layout.addWidget(down_btn, 2, 1)
+        self.down_btn = QPushButton("↓")
+        self.down_btn.clicked.connect(lambda: self.request_transform('translate', (0, 10)))
+        translation_layout.addWidget(self.down_btn, 2, 1)
         
         layout.addLayout(translation_layout, 2, 0, 1, 2)
         
@@ -242,27 +242,34 @@ class ControlPanel(QWidget):
             self.size_label.setText("Size: Multiple")
             self.file_label.setText("File: Multiple")
             
-            # Disable ONLY free rotation and 45° controls for groups
+            # For groups: ENABLE 90° rotation and arrows, DISABLE only 45°/free rotation/flip
             self.angle_spinbox.setEnabled(False)
             self.angle_45_btn.setEnabled(False)
             self.angle_neg45_btn.setEnabled(False)
             
-            # Keep 90° rotation buttons ENABLED for groups
+            # ENABLE 90° rotation buttons for groups
             self.rotate_cw_btn.setEnabled(True)
             self.rotate_ccw_btn.setEnabled(True)
             
-            # Keep arrow movement buttons ENABLED for groups
-            # Only disable the precise X/Y spinboxes (not the arrow buttons)
-            self.x_spinbox.setEnabled(False)  # Precise positioning disabled
-            self.y_spinbox.setEnabled(False)  # Precise positioning disabled
+            # ENABLE arrow movement buttons for groups (disable only precise X/Y spinboxes)
+            self.x_spinbox.setEnabled(False)
+            self.y_spinbox.setEnabled(False)
+            # Arrow buttons are in translation_layout - they stay enabled by default
             
-            # Disable ONLY flip controls for groups
-            self.flip_h_btn.setEnabled(False)  # Flip disabled for groups
-            self.flip_v_btn.setEnabled(False)  # Flip disabled for groups
+            # DISABLE flip controls for groups
+            self.flip_h_btn.setEnabled(False)
+            self.flip_v_btn.setEnabled(False)
             
-            # Keep visibility and opacity enabled for groups (affects all selected)
+            # ENABLE visibility and opacity for groups
             self.visible_checkbox.setEnabled(True)
             self.opacity_slider.setEnabled(True)
+            
+            # ENABLE arrow buttons for groups
+            self.up_btn.setEnabled(True)
+            self.down_btn.setEnabled(True)
+            self.left_btn.setEnabled(True)
+            self.right_btn.setEnabled(True)
+            self.center_btn.setEnabled(True)
             
         elif has_fragment and not self.is_group_selected:
             # Single fragment selection - enable everything
