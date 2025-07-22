@@ -23,6 +23,10 @@ class ControlPanel(QWidget):
         self.setup_ui()
         self.update_controls()
         
+        # Group selection state
+        self.selected_fragment_ids: List[str] = []
+        self.is_group_selected = False
+        
     def setup_ui(self):
         """Setup the control panel UI"""
         layout = QVBoxLayout(self)
@@ -97,15 +101,17 @@ class ControlPanel(QWidget):
         self.angle_spinbox.valueChanged.connect(self.on_angle_changed)
         angle_layout.addWidget(self.angle_spinbox)
         
-        # Quick angle buttons
+        # Quick angle buttons (45° - will be disabled for groups)
         angle_45_btn = QPushButton("45°")
         angle_45_btn.setToolTip("Rotate 45 degrees")
         angle_45_btn.clicked.connect(lambda: self.request_transform('rotate_angle', 45))
+        self.angle_45_btn = angle_45_btn  # Store reference for enabling/disabling
         angle_layout.addWidget(angle_45_btn)
         
         angle_neg45_btn = QPushButton("-45°")
         angle_neg45_btn.setToolTip("Rotate -45 degrees")
         angle_neg45_btn.clicked.connect(lambda: self.request_transform('rotate_angle', -45))
+        self.angle_neg45_btn = angle_neg45_btn  # Store reference for enabling/disabling
         angle_layout.addWidget(angle_neg45_btn)
         
         layout.addLayout(angle_layout, 1, 1)
@@ -209,55 +215,115 @@ class ControlPanel(QWidget):
     def set_selected_fragment(self, fragment: Optional[Fragment]):
         """Set the currently selected fragment"""
         self.current_fragment = fragment
+        self.selected_fragment_ids = []
+        self.is_group_selected = False
+        self.update_controls()
+    
+    def set_selected_fragments(self, fragment_ids: List[str], fragments: List[Fragment]):
+        """Set multiple selected fragments (group selection)"""
+        self.selected_fragment_ids = fragment_ids
+        self.is_group_selected = len(fragment_ids) > 1
+        self.current_fragment = fragments[0] if fragments else None  # Use first fragment for display
         self.update_controls()
         
     def update_controls(self):
         """Update control states based on current fragment"""
-        has_fragment = self.current_fragment is not None
+        has_fragment = self.current_fragment is not None or self.is_group_selected
         
         # Enable/disable controls
         self.transform_group.setEnabled(has_fragment)
-        self.position_group.setEnabled(has_fragment)
+        self.position_group.setEnabled(has_fragment and not self.is_group_selected)  # Disable position controls for groups
         self.display_group.setEnabled(has_fragment)
         
-        if not has_fragment:
-            self.name_label.setText("No fragment selected")
+        if self.is_group_selected:
+            # Update info for group selection
+            self.name_label.setText(f"Group Selection ({len(self.selected_fragment_ids)} fragments)")
+            self.size_label.setText("Size: Multiple")
+            self.file_label.setText("File: Multiple")
+            
+            # Disable free rotation controls for groups
+            self.angle_spinbox.setEnabled(False)
+            self.angle_45_btn.setEnabled(False)
+            self.angle_neg45_btn.setEnabled(False)
+            
+            # Keep 90° rotation buttons enabled
+            self.rotate_cw_btn.setEnabled(True)
+            self.rotate_ccw_btn.setEnabled(True)
+            
+            # Disable individual position controls
+            self.x_spinbox.setEnabled(False)
+            self.y_spinbox.setEnabled(False)
+            
+            # Disable flip controls for groups (could be added later if needed)
+            self.flip_h_btn.setEnabled(False)
+            self.flip_v_btn.setEnabled(False)
+            
+            # Disable visibility and opacity for groups
+            self.visible_checkbox.setEnabled(False)
+            self.opacity_slider.setEnabled(False)
+            
+        elif not has_fragment:
+            self.name_label.setText("No selection")
             self.size_label.setText("Size: -")
             self.file_label.setText("File: -")
+            
+            # Re-enable all controls
+            self.angle_spinbox.setEnabled(True)
+            self.angle_45_btn.setEnabled(True)
+            self.angle_neg45_btn.setEnabled(True)
+            self.flip_h_btn.setEnabled(True)
+            self.flip_v_btn.setEnabled(True)
+            self.visible_checkbox.setEnabled(True)
+            self.opacity_slider.setEnabled(True)
+            self.x_spinbox.setEnabled(True)
+            self.y_spinbox.setEnabled(True)
             return
             
-        fragment = self.current_fragment
-        
-        # Update info
-        self.name_label.setText(fragment.name or f"Fragment {fragment.id[:8]}")
-        self.size_label.setText(f"Size: {fragment.original_size[0]} × {fragment.original_size[1]}")
-        self.file_label.setText(f"File: {fragment.file_path}")
-        
-        # Update position controls (block signals to prevent recursion)
-        self.x_spinbox.blockSignals(True)
-        self.y_spinbox.blockSignals(True)
-        self.x_spinbox.setValue(fragment.x)
-        self.y_spinbox.setValue(fragment.y)
-        self.x_spinbox.blockSignals(False)
-        self.y_spinbox.blockSignals(False)
-        
-        # Update angle control
-        self.angle_spinbox.blockSignals(True)
-        self.angle_spinbox.setValue(fragment.rotation)
-        self.angle_spinbox.blockSignals(False)
-        
-        # Update display controls
-        self.visible_checkbox.blockSignals(True)
-        self.visible_checkbox.setChecked(fragment.visible)
-        self.visible_checkbox.blockSignals(False)
-        
-        self.opacity_slider.blockSignals(True)
-        self.opacity_slider.setValue(int(fragment.opacity * 100))
-        self.opacity_label.setText(f"{int(fragment.opacity * 100)}%")
-        self.opacity_slider.blockSignals(False)
-        
-        # Update transform button states
-        self.update_transform_button_states()
+        else:
+            # Single fragment selection
+            fragment = self.current_fragment
+            
+            # Re-enable all controls
+            self.angle_spinbox.setEnabled(True)
+            self.angle_45_btn.setEnabled(True)
+            self.angle_neg45_btn.setEnabled(True)
+            self.flip_h_btn.setEnabled(True)
+            self.flip_v_btn.setEnabled(True)
+            self.visible_checkbox.setEnabled(True)
+            self.opacity_slider.setEnabled(True)
+            self.x_spinbox.setEnabled(True)
+            self.y_spinbox.setEnabled(True)
+            
+            # Update info
+            self.name_label.setText(fragment.name or f"Fragment {fragment.id[:8]}")
+            self.size_label.setText(f"Size: {fragment.original_size[0]} × {fragment.original_size[1]}")
+            self.file_label.setText(f"File: {fragment.file_path}")
+            
+            # Update position controls (block signals to prevent recursion)
+            self.x_spinbox.blockSignals(True)
+            self.y_spinbox.blockSignals(True)
+            self.x_spinbox.setValue(fragment.x)
+            self.y_spinbox.setValue(fragment.y)
+            self.x_spinbox.blockSignals(False)
+            self.y_spinbox.blockSignals(False)
+            
+            # Update angle control
+            self.angle_spinbox.blockSignals(True)
+            self.angle_spinbox.setValue(fragment.rotation)
+            self.angle_spinbox.blockSignals(False)
+            
+            # Update display controls
+            self.visible_checkbox.blockSignals(True)
+            self.visible_checkbox.setChecked(fragment.visible)
+            self.visible_checkbox.blockSignals(False)
+            
+            self.opacity_slider.blockSignals(True)
+            self.opacity_slider.setValue(int(fragment.opacity * 100))
+            self.opacity_label.setText(f"{int(fragment.opacity * 100)}%")
+            self.opacity_slider.blockSignals(False)
+            
+            # Update transform button states
+            self.update_transform_button_states()
         
     def update_transform_button_states(self):
         """Update the visual state of transform buttons"""
@@ -279,12 +345,22 @@ class ControlPanel(QWidget):
             
     def request_transform(self, transform_type: str, value=None):
         """Request a transformation for the current fragment"""
-        if self.current_fragment:
+        if self.is_group_selected:
+            # Handle group transformations
+            if transform_type in ['rotate_cw', 'rotate_ccw']:
+                # Group rotation is allowed
+                self.transform_requested.emit('group', transform_type, self.selected_fragment_ids)
+        elif self.current_fragment:
+            # Handle single fragment transformations
             self.transform_requested.emit(self.current_fragment.id, transform_type, value)
             
     def request_reset(self):
         """Request reset of current fragment transforms"""
-        if self.current_fragment:
+        if self.is_group_selected:
+            # Reset all fragments in group
+            for fragment_id in self.selected_fragment_ids:
+                self.reset_transform_requested.emit(fragment_id)
+        elif self.current_fragment:
             self.reset_transform_requested.emit(self.current_fragment.id)
             
     def on_position_changed(self):

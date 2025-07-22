@@ -109,6 +109,10 @@ class MainWindow(QMainWindow):
         # Fragment manager connections
         self.fragment_manager.fragments_changed.connect(self.update_ui)
         self.fragment_manager.fragments_changed.connect(self.on_fragments_changed)
+        self.fragment_manager.group_selection_changed.connect(self.on_group_selection_changed)
+        
+        # Canvas group selection
+        self.canvas_widget.group_selected.connect(self.on_group_selected)
         
     def on_fragments_changed(self):
         """Handle fragment changes and update canvas efficiently"""
@@ -122,6 +126,23 @@ class MainWindow(QMainWindow):
         # Update toolbar with fragment count
         fragment_count = len(self.fragment_manager.get_all_fragments())
         self.toolbar.set_fragment_count(fragment_count)
+    
+    def on_group_selection_changed(self, fragment_ids: List[str]):
+        """Handle group selection changes"""
+        # Update canvas
+        self.canvas_widget.set_selected_fragment_ids(fragment_ids)
+        
+        # Update control panel
+        if fragment_ids:
+            fragments = [self.fragment_manager.get_fragment(fid) for fid in fragment_ids]
+            fragments = [f for f in fragments if f is not None]
+            self.control_panel.set_selected_fragments(fragment_ids, fragments)
+        else:
+            self.control_panel.set_selected_fragment(None)
+    
+    def on_group_selected(self, fragment_ids: List[str]):
+        """Handle group selection from canvas"""
+        self.fragment_manager.set_group_selection(fragment_ids)
         
     def setup_menu_bar(self):
         """Setup the menu bar"""
@@ -157,6 +178,15 @@ class MainWindow(QMainWindow):
         # Edit menu
         edit_menu = menubar.addMenu('&Edit')
         
+        # Rectangle selection tool
+        rectangle_select_action = QAction('&Rectangle Selection Tool', self)
+        rectangle_select_action.setShortcut(QKeySequence('Ctrl+Shift+R'))
+        rectangle_select_action.setCheckable(True)
+        rectangle_select_action.toggled.connect(self.toggle_rectangle_selection)
+        edit_menu.addAction(rectangle_select_action)
+        
+        edit_menu.addSeparator()
+        
         reset_action = QAction('&Reset All Transforms', self)
         reset_action.setShortcut(QKeySequence('Ctrl+R'))
         reset_action.triggered.connect(self.reset_fragments)
@@ -189,6 +219,14 @@ class MainWindow(QMainWindow):
         stitch_action.setShortcut(QKeySequence('Ctrl+S'))
         stitch_action.triggered.connect(self.perform_stitching)
         tools_menu.addAction(stitch_action)
+        
+    def toggle_rectangle_selection(self, enabled: bool):
+        """Toggle rectangle selection mode"""
+        self.canvas_widget.enable_rectangle_selection(enabled)
+        if enabled:
+            self.status_bar.showMessage("Rectangle selection mode enabled - drag to select multiple fragments")
+        else:
+            self.status_bar.showMessage("Rectangle selection mode disabled")
         
     def setup_status_bar(self):
         """Setup the status bar"""
@@ -305,6 +343,13 @@ class MainWindow(QMainWindow):
         elif transform_type == 'set_visibility':
             self.fragment_manager.set_fragment_visibility(fragment_id, value)
             
+        # Handle group transformations
+        elif fragment_id == 'group':
+            if transform_type == 'rotate_cw':
+                self.fragment_manager.rotate_group(value, 90)  # value contains fragment_ids
+            elif transform_type == 'rotate_ccw':
+                self.fragment_manager.rotate_group(value, -90)  # value contains fragment_ids
+            
     def reset_fragment_transform(self, fragment_id: str):
         """Reset fragment transformation"""
         self.fragment_manager.reset_fragment_transform(fragment_id)
@@ -314,6 +359,17 @@ class MainWindow(QMainWindow):
         # Ensure position is properly rounded to avoid floating point precision issues
         x = round(float(x), 2)
         y = round(float(y), 2)
+        
+        # Check if this fragment is part of a group selection
+        selected_ids = self.fragment_manager.get_selected_fragment_ids()
+        if len(selected_ids) > 1 and fragment_id in selected_ids:
+            # Calculate offset and move entire group
+            fragment = self.fragment_manager.get_fragment(fragment_id)
+            if fragment:
+                dx = x - fragment.x
+                dy = y - fragment.y
+                self.fragment_manager.translate_group(selected_ids, dx, dy)
+                return
         
         # Debug output
         fragment = self.fragment_manager.get_fragment(fragment_id)
@@ -423,6 +479,15 @@ class MainWindow(QMainWindow):
         
         # Update fragment list
         self.fragment_list.update_fragments(fragments)
+        
+        # Update fragment list selection state
+        selected_ids = self.fragment_manager.get_selected_fragment_ids()
+        if len(selected_ids) > 1:
+            self.fragment_list.set_selected_fragment_ids(selected_ids)
+        elif len(selected_ids) == 1:
+            self.fragment_list.set_selected_fragment(selected_ids[0])
+        else:
+            self.fragment_list.set_selected_fragment(None)
         
         # Update canvas
         self.canvas_widget.update_fragments(fragments)

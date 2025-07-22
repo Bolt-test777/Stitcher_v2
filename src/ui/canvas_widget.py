@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPoint, QRect, QThread, QObject
 from PyQt6.QtGui import (QPainter, QPixmap, QImage, QPen, QBrush, QColor, 
                         QMouseEvent, QWheelEvent, QPaintEvent, QResizeEvent, QTransform, QKeyEvent)
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtCore import QPointF
+from PyQt6.QtCore import QPointF, QRectF
 import cv2
 
 from ..core.fragment import Fragment
@@ -86,11 +86,13 @@ class CanvasWidget(QWidget):
     fragment_moved = pyqtSignal(str, float, float)  # fragment_id, x, y
     viewport_changed = pyqtSignal(float, float, float)  # zoom, pan_x, pan_y
     delete_requested = pyqtSignal(str)  # fragment_id
+    group_selected = pyqtSignal(list)  # list of fragment_ids
     
     def __init__(self):
         super().__init__()
         self.fragments: List[Fragment] = []
         self.selected_fragment_id: Optional[str] = None
+        self.selected_fragment_ids: List[str] = []  # For group selection
         
         # Viewport state
         self.zoom = 1.0
@@ -106,6 +108,13 @@ class CanvasWidget(QWidget):
         self.dragged_fragment_id: Optional[str] = None
         self.drag_offset = QPoint()
         
+        # Rectangle selection state
+        self.is_rectangle_selecting = False
+        self.rectangle_selection_enabled = False
+        self.selection_start_pos = QPoint()
+        self.selection_current_pos = QPoint()
+        self.selection_rect = QRect()
+        
         # Fragment rendering cache
         self.fragment_pixmaps: Dict[str, QPixmap] = {}
         self.fragment_zoom_cache: Dict[str, float] = {}
@@ -120,6 +129,10 @@ class CanvasWidget(QWidget):
         self.background_color = QColor(42, 42, 42)
         self.selection_color = QColor(74, 144, 226)
         self.selection_pen_width = 2.0
+        
+        # Rectangle selection styling
+        self.selection_rect_color = QColor(74, 144, 226, 100)  # Semi-transparent
+        self.selection_rect_border = QColor(74, 144, 226)
         
         # Update timers
         self.fast_update_timer = QTimer()
@@ -203,6 +216,21 @@ class CanvasWidget(QWidget):
         if self.selected_fragment_id != fragment_id:
             self.selected_fragment_id = fragment_id
             self.update()  # Just update display, no re-rendering needed
+    
+    def set_selected_fragment_ids(self, fragment_ids: List[str]):
+        """Set multiple selected fragments (group selection)"""
+        if self.selected_fragment_ids != fragment_ids:
+            self.selected_fragment_ids = fragment_ids
+            self.selected_fragment_id = None  # Clear single selection
+            self.update()
+    
+    def enable_rectangle_selection(self, enabled: bool):
+        """Enable or disable rectangle selection mode"""
+        self.rectangle_selection_enabled = enabled
+        if not enabled:
+            self.is_rectangle_selecting = False
+            self.selection_rect = QRect()
+            self.update()
             
     def schedule_render(self, fast: bool = False):
         """Schedule fragment rendering"""
@@ -356,6 +384,10 @@ class CanvasWidget(QWidget):
         # Draw selection outlines
         self.draw_selection_outlines(painter)
         
+        # Draw rectangle selection
+        if self.is_rectangle_selecting:
+            self.draw_selection_rectangle(painter)
+        
         painter.restore()
         
     def get_visible_world_rect(self) -> QRect:
@@ -404,29 +436,65 @@ class CanvasWidget(QWidget):
             if not fragment.visible:
                 continue
                 
-            if fragment.selected or fragment.id == self.selected_fragment_id:
+            is_selected = (fragment.selected or 
+                          fragment.id == self.selected_fragment_id or
+                          fragment.id in self.selected_fragment_ids)
+            
+            if is_selected:
                 bbox = fragment.get_bounding_box()
                 rect = QRect(int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
                 painter.drawRect(rect)
+    
+    def draw_selection_rectangle(self, painter: QPainter):
+        """Draw the rectangle selection overlay"""
+        if self.selection_rect.isEmpty():
+            return
+        
+        # Draw filled rectangle
+        painter.fillRect(self.selection_rect, self.selection_rect_color)
+        
+        # Draw border
+        pen = QPen(self.selection_rect_border, 2.0 / self.zoom)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.setBrush(QBrush())
+        painter.drawRect(self.selection_rect)
                 
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press events"""
         if event.button() == Qt.MouseButton.LeftButton:
-            world_pos = self.screen_to_world(event.pos())
-            clicked_fragment = self.get_fragment_at_position(world_pos.x(), world_pos.y())
-            
-            if clicked_fragment:
-                # Select and start dragging fragment
-                self.fragment_selected.emit(clicked_fragment.id)
-                self.is_dragging_fragment = True
-                self.dragged_fragment_id = clicked_fragment.id
-                self.drag_offset = QPoint(
-                    int(world_pos.x() - clicked_fragment.x),
-                    int(world_pos.y() - clicked_fragment.y)
-                )
+            if self.rectangle_selection_enabled:
+                # Start rectangle selection
+                self.is_rectangle_selecting = True
+                self.selection_start_pos = self.screen_to_world(event.pos())
+                self.selection_current_pos = self.selection_start_pos
+                self.selection_rect = QRect()
             else:
-                # Start panning
-                self.is_panning = True
+                world_pos = self.screen_to_world(event.pos())
+                clicked_fragment = self.get_fragment_at_position(world_pos.x(), world_pos.y())
+                
+                if clicked_fragment:
+                    # Check if clicking on already selected group member
+                    if clicked_fragment.id in self.selected_fragment_ids:
+                        # Start dragging entire group
+                        self.is_dragging_fragment = True
+                        self.dragged_fragment_id = clicked_fragment.id
+                        self.drag_offset = QPoint(
+                            int(world_pos.x() - clicked_fragment.x),
+                            int(world_pos.y() - clicked_fragment.y)
+                        )
+                    else:
+                        # Select single fragment and start dragging
+                        self.fragment_selected.emit(clicked_fragment.id)
+                        self.is_dragging_fragment = True
+                        self.dragged_fragment_id = clicked_fragment.id
+                        self.drag_offset = QPoint(
+                            int(world_pos.x() - clicked_fragment.x),
+                            int(world_pos.y() - clicked_fragment.y)
+                        )
+                else:
+                    # Start panning
+                    self.is_panning = True
                 
         elif event.button() == Qt.MouseButton.MiddleButton:
             # Always pan with middle button
@@ -436,13 +504,46 @@ class CanvasWidget(QWidget):
         
     def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move events"""
-        if self.is_dragging_fragment and self.dragged_fragment_id:
+        if self.is_rectangle_selecting:
+            # Update rectangle selection
+            self.selection_current_pos = self.screen_to_world(event.pos())
+            
+            # Calculate rectangle
+            top_left = QPoint(
+                min(self.selection_start_pos.x(), self.selection_current_pos.x()),
+                min(self.selection_start_pos.y(), self.selection_current_pos.y())
+            )
+            bottom_right = QPoint(
+                max(self.selection_start_pos.x(), self.selection_current_pos.x()),
+                max(self.selection_start_pos.y(), self.selection_current_pos.y())
+            )
+            
+            self.selection_rect = QRect(top_left, bottom_right)
+            self.update()
+            
+        elif self.is_dragging_fragment and self.dragged_fragment_id:
             # Move fragment
             world_pos = self.screen_to_world(event.pos())
             new_x = world_pos.x() - self.drag_offset.x()
             new_y = world_pos.y() - self.drag_offset.y()
             
-            self.fragment_moved.emit(self.dragged_fragment_id, new_x, new_y)
+            # Check if dragging a group
+            if self.dragged_fragment_id in self.selected_fragment_ids:
+                # Calculate offset for group movement
+                dragged_fragment = self.get_fragment_by_id(self.dragged_fragment_id)
+                if dragged_fragment:
+                    dx = new_x - dragged_fragment.x
+                    dy = new_y - dragged_fragment.y
+                    
+                    # Move entire group
+                    for frag_id in self.selected_fragment_ids:
+                        fragment = self.get_fragment_by_id(frag_id)
+                        if fragment:
+                            self.fragment_moved.emit(frag_id, fragment.x + dx, fragment.y + dy)
+            else:
+                # Move single fragment
+                self.fragment_moved.emit(self.dragged_fragment_id, new_x, new_y)
+            
             self.update()  # Just update display, don't re-render
             
         elif self.is_panning:
@@ -457,6 +558,31 @@ class CanvasWidget(QWidget):
         
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release events"""
+        if self.is_rectangle_selecting:
+            # Complete rectangle selection
+            self.is_rectangle_selecting = False
+            
+            if not self.selection_rect.isEmpty():
+                # Find fragments intersecting with selection rectangle
+                selected_fragments = []
+                
+                for fragment in self.fragments:
+                    if not fragment.visible:
+                        continue
+                    
+                    bbox = fragment.get_bounding_box()
+                    frag_rect = QRect(int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
+                    
+                    if self.selection_rect.intersects(frag_rect):
+                        selected_fragments.append(fragment.id)
+                
+                # Emit group selection
+                if selected_fragments:
+                    self.group_selected.emit(selected_fragments)
+            
+            self.selection_rect = QRect()
+            self.update()
+        
         self.is_panning = False
         self.is_dragging_fragment = False
         self.dragged_fragment_id = None

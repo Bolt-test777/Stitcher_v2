@@ -5,6 +5,7 @@ Fragment management system
 from typing import Dict, List, Optional, Tuple
 from PyQt6.QtCore import QObject, pyqtSignal
 import numpy as np
+import math
 
 from .fragment import Fragment
 
@@ -13,11 +14,13 @@ class FragmentManager(QObject):
     
     fragments_changed = pyqtSignal()
     fragment_selected = pyqtSignal(str)  # fragment_id
+    group_selection_changed = pyqtSignal(list)  # list of fragment_ids
     
     def __init__(self):
         super().__init__()
         self._fragments: Dict[str, Fragment] = {}
         self._selected_fragment_id: Optional[str] = None
+        self._selected_fragment_ids: List[str] = []  # For group selection
         
     def add_fragment_from_image(self, image_data: np.ndarray, name: str, 
                                file_path: str = "") -> str:
@@ -45,6 +48,14 @@ class FragmentManager(QObject):
         """Get all fragments"""
         return list(self._fragments.values())
     
+    def get_selected_fragments(self) -> List[Fragment]:
+        """Get all selected fragments (for group operations)"""
+        return [self._fragments[fid] for fid in self._selected_fragment_ids if fid in self._fragments]
+    
+    def has_group_selection(self) -> bool:
+        """Check if multiple fragments are selected"""
+        return len(self._selected_fragment_ids) > 1
+    
     def get_visible_fragments(self) -> List[Fragment]:
         """Get only visible fragments"""
         return [f for f in self._fragments.values() if f.visible]
@@ -63,8 +74,62 @@ class FragmentManager(QObject):
             return True
         return False
     
+    def set_group_selection(self, fragment_ids: List[str]):
+        """Set multiple fragments as selected (group selection)"""
+        # Clear previous selections
+        for fid in self._selected_fragment_ids:
+            fragment = self._fragments.get(fid)
+            if fragment:
+                fragment.selected = False
+        
+        # Clear single selection
+        if self._selected_fragment_id:
+            prev_fragment = self._fragments.get(self._selected_fragment_id)
+            if prev_fragment:
+                prev_fragment.selected = False
+        
+        # Set new group selection
+        self._selected_fragment_ids = [fid for fid in fragment_ids if fid in self._fragments]
+        self._selected_fragment_id = None  # Clear single selection when group is selected
+        
+        # Mark fragments as selected
+        for fid in self._selected_fragment_ids:
+            fragment = self._fragments.get(fid)
+            if fragment:
+                fragment.selected = True
+        
+        self.group_selection_changed.emit(self._selected_fragment_ids)
+        self.fragments_changed.emit()
+    
+    def clear_selection(self):
+        """Clear all selections"""
+        # Clear group selection
+        for fid in self._selected_fragment_ids:
+            fragment = self._fragments.get(fid)
+            if fragment:
+                fragment.selected = False
+        
+        # Clear single selection
+        if self._selected_fragment_id:
+            fragment = self._fragments.get(self._selected_fragment_id)
+            if fragment:
+                fragment.selected = False
+        
+        self._selected_fragment_ids = []
+        self._selected_fragment_id = None
+        
+        self.group_selection_changed.emit([])
+        self.fragments_changed.emit()
+    
     def set_selected_fragment(self, fragment_id: Optional[str]):
         """Set the selected fragment"""
+        # Clear group selection when selecting single fragment
+        for fid in self._selected_fragment_ids:
+            fragment = self._fragments.get(fid)
+            if fragment:
+                fragment.selected = False
+        self._selected_fragment_ids = []
+        
         # Deselect previous fragment
         if self._selected_fragment_id:
             prev_fragment = self._fragments.get(self._selected_fragment_id)
@@ -77,12 +142,20 @@ class FragmentManager(QObject):
         if fragment_id and fragment_id in self._fragments:
             self._fragments[fragment_id].selected = True
             self.fragment_selected.emit(fragment_id)
+        
+        self.group_selection_changed.emit(self._selected_fragment_ids)
             
         self.fragments_changed.emit()
     
     def get_selected_fragment_id(self) -> Optional[str]:
         """Get the selected fragment ID"""
         return self._selected_fragment_id
+    
+    def get_selected_fragment_ids(self) -> List[str]:
+        """Get all selected fragment IDs (including group selection)"""
+        if self._selected_fragment_ids:
+            return self._selected_fragment_ids.copy()
+        return [self._selected_fragment_id] if self._selected_fragment_id else []
     
     def get_selected_fragment(self) -> Optional[Fragment]:
         """Get the selected fragment"""
@@ -116,6 +189,16 @@ class FragmentManager(QObject):
             
             self.fragments_changed.emit()
     
+    def translate_group(self, fragment_ids: List[str], dx: float, dy: float):
+        """Translate multiple fragments by the same offset (preserving relative positions)"""
+        for fragment_id in fragment_ids:
+            fragment = self._fragments.get(fragment_id)
+            if fragment:
+                fragment.x = fragment.x + float(dx)
+                fragment.y = fragment.y + float(dy)
+        
+        self.fragments_changed.emit()
+    
     def rotate_fragment(self, fragment_id: str, angle: int):
         """Rotate fragment by angle (90 degree increments)"""
         fragment = self._fragments.get(fragment_id)
@@ -131,6 +214,54 @@ class FragmentManager(QObject):
             fragment.rotation = angle % 360.0
             fragment.invalidate_cache()
             self.fragments_changed.emit()
+    
+    def rotate_group(self, fragment_ids: List[str], angle: int):
+        """Rotate multiple fragments around their group center"""
+        if not fragment_ids:
+            return
+        
+        # Get fragments
+        fragments = [self._fragments[fid] for fid in fragment_ids if fid in self._fragments]
+        if not fragments:
+            return
+        
+        # Calculate group center (centroid)
+        center_x = sum(f.x + f.get_bounding_box()[2]/2 for f in fragments) / len(fragments)
+        center_y = sum(f.y + f.get_bounding_box()[3]/2 for f in fragments) / len(fragments)
+        
+        # Convert angle to radians
+        angle_rad = math.radians(angle)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        
+        # Rotate each fragment around the group center
+        for fragment in fragments:
+            # Get fragment center
+            bbox = fragment.get_bounding_box()
+            frag_center_x = fragment.x + bbox[2]/2
+            frag_center_y = fragment.y + bbox[3]/2
+            
+            # Translate to origin (relative to group center)
+            rel_x = frag_center_x - center_x
+            rel_y = frag_center_y - center_y
+            
+            # Rotate around origin
+            new_rel_x = rel_x * cos_a - rel_y * sin_a
+            new_rel_y = rel_x * sin_a + rel_y * cos_a
+            
+            # Translate back and update fragment position
+            new_frag_center_x = center_x + new_rel_x
+            new_frag_center_y = center_y + new_rel_y
+            
+            # Update fragment position (adjust for fragment's own center)
+            fragment.x = new_frag_center_x - bbox[2]/2
+            fragment.y = new_frag_center_y - bbox[3]/2
+            
+            # Also rotate the fragment itself
+            fragment.rotation = (fragment.rotation + angle) % 360.0
+            fragment.invalidate_cache()
+        
+        self.fragments_changed.emit()
     
     def flip_fragment(self, fragment_id: str, horizontal: bool = True):
         """Flip fragment horizontally or vertically"""

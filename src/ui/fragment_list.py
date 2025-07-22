@@ -130,6 +130,9 @@ class FragmentListWidget(QWidget):
         self.fragment_items: dict = {}  # fragment_id -> (QListWidgetItem, FragmentListItem)
         self.setup_ui()
         
+        # Group selection state
+        self.selected_fragment_ids: List[str] = []
+        
     def setup_ui(self):
         """Setup the fragment list UI"""
         layout = QVBoxLayout(self)
@@ -230,14 +233,42 @@ class FragmentListWidget(QWidget):
         if self.selected_fragment_id and self.selected_fragment_id in self.fragment_items:
             _, widget = self.fragment_items[self.selected_fragment_id]
             widget.set_selected(False)
+        
+        # Clear group selection display
+        for frag_id in self.selected_fragment_ids:
+            if frag_id in self.fragment_items:
+                _, widget = self.fragment_items[frag_id]
+                widget.set_selected(False)
             
         self.selected_fragment_id = fragment_id
+        self.selected_fragment_ids = []
         
         # Set new selection
         if fragment_id and fragment_id in self.fragment_items:
             list_item, widget = self.fragment_items[fragment_id]
             widget.set_selected(True)
             self.list_widget.setCurrentItem(list_item)
+    
+    def set_selected_fragment_ids(self, fragment_ids: List[str]):
+        """Set multiple selected fragments (group selection)"""
+        # Clear previous selections
+        if self.selected_fragment_id and self.selected_fragment_id in self.fragment_items:
+            _, widget = self.fragment_items[self.selected_fragment_id]
+            widget.set_selected(False)
+        
+        for frag_id in self.selected_fragment_ids:
+            if frag_id in self.fragment_items:
+                _, widget = self.fragment_items[frag_id]
+                widget.set_selected(False)
+        
+        # Set new group selection
+        self.selected_fragment_ids = fragment_ids
+        self.selected_fragment_id = None
+        
+        for frag_id in fragment_ids:
+            if frag_id in self.fragment_items:
+                _, widget = self.fragment_items[frag_id]
+                widget.set_selected(True)
             
     def on_item_clicked(self, item: QListWidgetItem):
         """Handle item click events"""
